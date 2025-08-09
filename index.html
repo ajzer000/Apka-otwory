@@ -1,250 +1,155 @@
 <!DOCTYPE html>
-
 <html lang="pl">
-
 <head>
-
 <meta charset="UTF-8" />
-
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-<title>Obliczanie otworów w kantówce</title>
-
+<title>Obliczenia otworów w kantówce</title>
 <style>
-
-  body { font-family: Arial, sans-serif; margin: 20px; }
-
-  label { display: block; margin-top: 10px; }
-
-  input[type="number"] { width: 100%; padding: 6px; font-size: 1em; }
-
-  button { margin-top: 15px; padding: 10px 20px; font-size: 1em; }
-
-  #result { margin-top: 20px; white-space: pre-wrap; }
-
-  canvas { border: 1px solid #333; margin-top: 20px; width: 100%; max-width: 600px; height: 100px; }
-
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 0 15px; }
+  label { display: block; margin-top: 15px; }
+  input[type=number] { width: 100%; padding: 8px; font-size: 16px; }
+  button { margin-top: 20px; padding: 10px 15px; font-size: 16px; cursor: pointer; }
+  .results { margin-top: 30px; }
+  canvas { margin-top: 20px; border: 1px solid #ccc; width: 100%; max-width: 580px; height: 80px; }
+  ul { padding-left: 20px; }
 </style>
-
 </head>
-
 <body>
 
-  <h1>Obliczanie otworów w kantówce</h1>
+<h1>Obliczenia otworów w kantówce</h1>
 
-  <label>Długość kantówki (mm):
+<label for="kantowkaLength">Długość kantówki (mm):</label>
+<input type="number" id="kantowkaLength" min="1" step="1" placeholder="np. 2000" />
 
-    <input type="number" id="length" min="1" step="1" />
+<label for="otworWidth">Szerokość otworu (mm):</label>
+<input type="number" id="otworWidth" min="1" step="1" placeholder="np. 50" />
 
-  </label>
+<button id="calculateBtn">Oblicz</button>
 
-  <label>Szerokość otworu (mm):
+<div class="results" id="results"></div>
 
-    <input type="number" id="holeWidth" min="1" step="1" />
-
-  </label>
-
-  <label>Maksymalna odległość między krawędziami otworów (mm) (max 400):
-
-    <input type="number" id="maxGap" min="1" max="400" step="1" value="400"/>
-
-  </label>
-
-  <button id="calculateBtn">Oblicz</button>
-
-  <div id="result"></div>
-
-  <canvas id="canvas" width="600" height="100"></canvas>
+<canvas id="schemat"></canvas>
 
 <script>
+  const maxDistance = 400; // max odstęp między krawędziami otworów w mm
 
-  const lengthInput = document.getElementById('length');
+  function calculateHoles(kantowkaLength, otworWidth) {
+    if (kantowkaLength <= 0 || otworWidth <= 0) return null;
 
-  const holeWidthInput = document.getElementById('holeWidth');
+    // Minimalnie 2 otwory - na początku i na końcu
+    // Odstęp to odległość między krawędziami otworów
+    // Pozycja otworu to odległość od początku kantówki do środka otworu
 
-  const maxGapInput = document.getElementById('maxGap');
+    // Liczymy max ilość odstępów: odstęp max 400mm, więc ile max odstępów zmieści się w kantówce
+    // Kantówka ma 2 krawędzie z otworami (początek i koniec), między nimi odstępy
+    // Liczba otworów = liczba odstępów + 1
+    // Odstęp liczony jako: odstęp między krawędziami otworów
 
-  const calculateBtn = document.getElementById('calculateBtn');
+    // Obliczamy max liczbę odstępów:
+    // odstęp max = 400 mm
+    // długość kantówki minus szerokość otworu (bo otwory na końcach)
+    const availableLength = kantowkaLength - otworWidth;
+    let maxIntervals = Math.ceil(availableLength / maxDistance);
 
-  const resultDiv = document.getElementById('result');
+    // Liczba otworów to maxIntervals + 1, ale minimalnie 2
+    if (maxIntervals < 1) maxIntervals = 1;
+    const holesCount = maxIntervals + 1;
 
-  const canvas = document.getElementById('canvas');
+    // Równe odstępy między krawędziami otworów:
+    const interval = availableLength / maxIntervals;
 
-  const ctx = canvas.getContext('2d');
-
-  // Załaduj zapisane wartości
-
-  window.onload = () => {
-
-    if(localStorage.getItem('kantowka_length')) lengthInput.value = localStorage.getItem('kantowka_length');
-
-    if(localStorage.getItem('kantowka_holeWidth')) holeWidthInput.value = localStorage.getItem('kantowka_holeWidth');
-
-    if(localStorage.getItem('kantowka_maxGap')) maxGapInput.value = localStorage.getItem('kantowka_maxGap');
-
-  }
-
-  function calculateHoles(length, holeWidth, maxGap) {
-
-    // Odległość od krawędzi otworu do krawędzi następnego max maxGap, więc środek - środek to maxGap + holeWidth
-
-    const step = maxGap + holeWidth;
-
-    // Minimalna liczba otworów, aby pokryć całą długość
-
-    let holesCount = Math.ceil((length - holeWidth) / step) + 1;
-
-    if (holesCount < 2) holesCount = 2;
-
-    // Pozycje otworów (od krawędzi początku kantówki)
-
-    const positions = [];
-
-    for(let i=0; i<holesCount; i++) {
-
-      let pos = i * step + holeWidth/2;
-
-      if(pos > length - holeWidth/2) pos = length - holeWidth/2; // ostatni otwór na końcu
-
+    // Pozycje otworów (od początku kantówki do środka otworu)
+    // Pierwszy otwór: środek na odległości otworWidth/2 od początku (krawędź otworu na 0)
+    // Ostatni otwór: środek na odległości kantowkaLength - otworWidth/2 (krawędź na kantowkaLength)
+    // Pozycje środków kolejnych otworów:
+    let positions = [];
+    for(let i = 0; i < holesCount; i++) {
+      // Pozycja środka otworu:
+      let pos = (otworWidth / 2) + i * interval;
       positions.push(pos);
-
     }
 
-    // Upewnijmy się, że pierwszy otwór jest na początku
+    // Odstępy między krawędziami otworów:
+    // między otworami i i i+1 to: pozycja[i+1] - pozycja[i] - szerokość otworu
+    let distances = [];
+    for(let i=0; i<positions.length-1; i++) {
+      distances.push(positions[i+1] - positions[i] - otworWidth);
+    }
 
-    positions[0] = holeWidth/2;
-
-    return positions;
-
+    return { holesCount, positions, distances };
   }
 
-  function drawDiagram(length, holeWidth, positions) {
+  function drawScheme(kantowkaLength, otworWidth, positions) {
+    const canvas = document.getElementById('schemat');
+    const ctx = canvas.getContext('2d');
+
+    // ustaw rozmiar canvas zgodnie z rozdzielczością i szerokością ekranu
+    canvas.width = canvas.clientWidth * window.devicePixelRatio;
+    canvas.height = 80 * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    // skalowanie: długość kantówki do szerokości canvas (max 580px)
+    const scale = 580 / kantowkaLength;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Skala długości w px
+    // rysuj kantówkę jako prostokąt tła
+    ctx.fillStyle = '#eee';
+    ctx.fillRect(0, 20, kantowkaLength * scale, 40);
 
-    const padding = 40;
-
-    const scale = (canvas.width - 2*padding) / length;
-
-    // Rysujemy kantówkę jako prostokąt
-
-    ctx.fillStyle = '#ddd';
-
-    const kantowkaHeight = 60;
-
-    ctx.fillRect(padding, canvas.height/2 - kantowkaHeight/2, length*scale, kantowkaHeight);
-
-    // Rysujemy otwory jako prostokąty
-
-    ctx.fillStyle = '#3498db';
-
-    const holeHeight = 40;
-
-    positions.forEach((pos, i) => {
-
-      const x = padding + (pos - holeWidth/2) * scale;
-
-      ctx.fillRect(x, canvas.height/2 - holeHeight/2, holeWidth*scale, holeHeight);
-
+    // rysuj otwory jako ciemne prostokąty
+    ctx.fillStyle = '#007ACC';
+    positions.forEach(pos => {
+      const x = (pos - otworWidth/2) * scale;
+      ctx.fillRect(x, 20, otworWidth * scale, 40);
     });
 
+    // dodaj podpisy (odległości od początku kantówki) nad otworami
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    positions.forEach(pos => {
+      ctx.fillText(Math.round(pos) + ' mm', pos * scale, 15);
+    });
   }
 
-  function calculateDistances(positions) {
+  document.getElementById('calculateBtn').addEventListener('click', () => {
+    const kantowkaLength = parseFloat(document.getElementById('kantowkaLength').value);
+    const otworWidth = parseFloat(document.getElementById('otworWidth').value);
 
-    const distances = [];
-
-    for(let i=1; i<positions.length; i++) {
-
-      distances.push((positions[i] - positions[i-1]));
-
-    }
-
-    return distances;
-
-  }
-
-  calculateBtn.onclick = () => {
-
-    const length = parseFloat(lengthInput.value);
-
-    const holeWidth = parseFloat(holeWidthInput.value);
-
-    let maxGap = parseFloat(maxGapInput.value);
-
-    if(isNaN(length) || length <= 0) {
-
-      alert('Podaj poprawną długość kantówki!');
-
+    if (isNaN(kantowkaLength) || kantowkaLength <= 0) {
+      alert('Podaj poprawną długość kantówki.');
       return;
-
     }
-
-    if(isNaN(holeWidth) || holeWidth <= 0) {
-
-      alert('Podaj poprawną szerokość otworu!');
-
+    if (isNaN(otworWidth) || otworWidth <= 0 || otworWidth > kantowkaLength) {
+      alert('Podaj poprawną szerokość otworu (mniejszą niż długość kantówki).');
       return;
-
     }
 
-    if(isNaN(maxGap) || maxGap <= 0 || maxGap > 400) {
+    const result = calculateHoles(kantowkaLength, otworWidth);
 
-      alert('Podaj maksymalną odległość między otworami (max 400 mm)!');
-
+    if (!result) {
+      alert('Błąd obliczeń.');
       return;
-
     }
 
-    if(holeWidth > length) {
-
-      alert('Szerokość otworu nie może być większa niż długość kantówki!');
-
-      return;
-
-    }
-
-    // Zapisz wartości
-
-    localStorage.setItem('kantowka_length', length);
-
-    localStorage.setItem('kantowka_holeWidth', holeWidth);
-
-    localStorage.setItem('kantowka_maxGap', maxGap);
-
-    const positions = calculateHoles(length, holeWidth, maxGap);
-
-    drawDiagram(length, holeWidth, positions);
-
-    const distances = calculateDistances(positions);
-
-    let resultText = `Liczba otworów: ${positions.length}\n`;
-
-    resultText += 'Pozycje otworów (mm od początku kantówki):\n';
-
-    positions.forEach((pos, i) => {
-
-      resultText += `  Otwór ${i+1}: ${pos.toFixed(2)}\n`;
-
+    let html = `<p><strong>Liczba otworów:</strong> ${result.holesCount}</p>`;
+    html += '<p><strong>Pozycje otworów (od środka otworu, w mm):</strong></p><ul>';
+    result.positions.forEach((pos, i) => {
+      html += `<li>Otwór ${i+1}: ${pos.toFixed(1)} mm</li>`;
     });
+    html += '</ul>';
 
-    resultText += '\nOdległości między otworami (mm):\n';
-
-    distances.forEach((dist, i) => {
-
-      resultText += `  Między otworem ${i+1} a ${i+2}: ${dist.toFixed(2)}\n`;
-
+    html += '<p><strong>Odstępy między krawędziami otworów (mm):</strong></p><ul>';
+    result.distances.forEach((dist, i) => {
+      html += `<li>Między otworem ${i+1} a ${i+2}: ${dist.toFixed(1)} mm</li>`;
     });
+    html += '</ul>';
 
-    resultDiv.textContent = resultText;
-
-  };
-
+    document.getElementById('results').innerHTML = html;
+    drawScheme(kantowkaLength, otworWidth, result.positions);
+  });
 </script>
 
 </body>
-
 </html>
-
