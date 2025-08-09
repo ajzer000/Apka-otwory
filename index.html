@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html lang="pl">
+
+<head>
+
+<meta charset="UTF-8" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<title>Obliczanie otworów w kantówce</title>
+
+<style>
+
+  body { font-family: Arial, sans-serif; margin: 20px; }
+
+  label { display: block; margin-top: 10px; }
+
+  input[type="number"] { width: 100%; padding: 6px; font-size: 1em; }
+
+  button { margin-top: 15px; padding: 10px 20px; font-size: 1em; }
+
+  #result { margin-top: 20px; white-space: pre-wrap; }
+
+  canvas { border: 1px solid #333; margin-top: 20px; width: 100%; max-width: 600px; height: 100px; }
+
+</style>
+
+</head>
+
+<body>
+
+  <h1>Obliczanie otworów w kantówce</h1>
+
+  <label>Długość kantówki (mm):
+
+    <input type="number" id="length" min="1" step="1" />
+
+  </label>
+
+  <label>Szerokość otworu (mm):
+
+    <input type="number" id="holeWidth" min="1" step="1" />
+
+  </label>
+
+  <label>Maksymalna odległość między krawędziami otworów (mm) (max 400):
+
+    <input type="number" id="maxGap" min="1" max="400" step="1" value="400"/>
+
+  </label>
+
+  <button id="calculateBtn">Oblicz</button>
+
+  <div id="result"></div>
+
+  <canvas id="canvas" width="600" height="100"></canvas>
+
+<script>
+
+  const lengthInput = document.getElementById('length');
+
+  const holeWidthInput = document.getElementById('holeWidth');
+
+  const maxGapInput = document.getElementById('maxGap');
+
+  const calculateBtn = document.getElementById('calculateBtn');
+
+  const resultDiv = document.getElementById('result');
+
+  const canvas = document.getElementById('canvas');
+
+  const ctx = canvas.getContext('2d');
+
+  // Załaduj zapisane wartości
+
+  window.onload = () => {
+
+    if(localStorage.getItem('kantowka_length')) lengthInput.value = localStorage.getItem('kantowka_length');
+
+    if(localStorage.getItem('kantowka_holeWidth')) holeWidthInput.value = localStorage.getItem('kantowka_holeWidth');
+
+    if(localStorage.getItem('kantowka_maxGap')) maxGapInput.value = localStorage.getItem('kantowka_maxGap');
+
+  }
+
+  function calculateHoles(length, holeWidth, maxGap) {
+
+    // Odległość od krawędzi otworu do krawędzi następnego max maxGap, więc środek - środek to maxGap + holeWidth
+
+    const step = maxGap + holeWidth;
+
+    // Minimalna liczba otworów, aby pokryć całą długość
+
+    let holesCount = Math.ceil((length - holeWidth) / step) + 1;
+
+    if (holesCount < 2) holesCount = 2;
+
+    // Pozycje otworów (od krawędzi początku kantówki)
+
+    const positions = [];
+
+    for(let i=0; i<holesCount; i++) {
+
+      let pos = i * step + holeWidth/2;
+
+      if(pos > length - holeWidth/2) pos = length - holeWidth/2; // ostatni otwór na końcu
+
+      positions.push(pos);
+
+    }
+
+    // Upewnijmy się, że pierwszy otwór jest na początku
+
+    positions[0] = holeWidth/2;
+
+    return positions;
+
+  }
+
+  function drawDiagram(length, holeWidth, positions) {
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Skala długości w px
+
+    const padding = 40;
+
+    const scale = (canvas.width - 2*padding) / length;
+
+    // Rysujemy kantówkę jako prostokąt
+
+    ctx.fillStyle = '#ddd';
+
+    const kantowkaHeight = 60;
+
+    ctx.fillRect(padding, canvas.height/2 - kantowkaHeight/2, length*scale, kantowkaHeight);
+
+    // Rysujemy otwory jako prostokąty
+
+    ctx.fillStyle = '#3498db';
+
+    const holeHeight = 40;
+
+    positions.forEach((pos, i) => {
+
+      const x = padding + (pos - holeWidth/2) * scale;
+
+      ctx.fillRect(x, canvas.height/2 - holeHeight/2, holeWidth*scale, holeHeight);
+
+    });
+
+  }
+
+  function calculateDistances(positions) {
+
+    const distances = [];
+
+    for(let i=1; i<positions.length; i++) {
+
+      distances.push((positions[i] - positions[i-1]));
+
+    }
+
+    return distances;
+
+  }
+
+  calculateBtn.onclick = () => {
+
+    const length = parseFloat(lengthInput.value);
+
+    const holeWidth = parseFloat(holeWidthInput.value);
+
+    let maxGap = parseFloat(maxGapInput.value);
+
+    if(isNaN(length) || length <= 0) {
+
+      alert('Podaj poprawną długość kantówki!');
+
+      return;
+
+    }
+
+    if(isNaN(holeWidth) || holeWidth <= 0) {
+
+      alert('Podaj poprawną szerokość otworu!');
+
+      return;
+
+    }
+
+    if(isNaN(maxGap) || maxGap <= 0 || maxGap > 400) {
+
+      alert('Podaj maksymalną odległość między otworami (max 400 mm)!');
+
+      return;
+
+    }
+
+    if(holeWidth > length) {
+
+      alert('Szerokość otworu nie może być większa niż długość kantówki!');
+
+      return;
+
+    }
+
+    // Zapisz wartości
+
+    localStorage.setItem('kantowka_length', length);
+
+    localStorage.setItem('kantowka_holeWidth', holeWidth);
+
+    localStorage.setItem('kantowka_maxGap', maxGap);
+
+    const positions = calculateHoles(length, holeWidth, maxGap);
+
+    drawDiagram(length, holeWidth, positions);
+
+    const distances = calculateDistances(positions);
+
+    let resultText = `Liczba otworów: ${positions.length}\n`;
+
+    resultText += 'Pozycje otworów (mm od początku kantówki):\n';
+
+    positions.forEach((pos, i) => {
+
+      resultText += `  Otwór ${i+1}: ${pos.toFixed(2)}\n`;
+
+    });
+
+    resultText += '\nOdległości między otworami (mm):\n';
+
+    distances.forEach((dist, i) => {
+
+      resultText += `  Między otworem ${i+1} a ${i+2}: ${dist.toFixed(2)}\n`;
+
+    });
+
+    resultDiv.textContent = resultText;
+
+  };
+
+</script>
+
+</body>
+
+</html>
+
